@@ -6,6 +6,8 @@ import (
 	"pay2post/models"
 
 	"github.com/gin-gonic/gin"
+	"github.com/stripe/stripe-go/v72"
+	"github.com/stripe/stripe-go/v72/charge"
 	"go.uber.org/zap" // Import Zap
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/driver/sqlite"
@@ -51,6 +53,7 @@ func main() {
 	r.POST("/register", register)
 	r.POST("/login", login)
 	r.POST("/posts", createPost) // Payment handling removed
+	r.POST("/pay", paymentHandler) // Payment endpoint
 	r.GET("/posts", getPosts)
 	r.PUT("/posts/:id", updatePost)
 	r.DELETE("/posts/:id", deletePost)
@@ -131,6 +134,45 @@ func createPost(c *gin.Context) {
 
 	logger.Info("post created successfully", zap.Uint("post_id", post.ID)) // Log info
 	c.JSON(http.StatusOK, post)
+}
+
+func paymentHandler(c *gin.Context) {
+	var input struct {
+		Token  string `json:"token"`
+		PostID uint   `json:"post_id"`
+	}
+
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	stripe.Key = "sk_test_YOUR_SECRET_KEY"
+
+	params := &stripe.ChargeParams{
+		Amount:      stripe.Int64(500), // Amount in cents
+		Currency:    stripe.String(string(stripe.CurrencyUSD)),
+		Description: stripe.String("Pay2Post charge"),
+	}
+	params.SetSource(input.Token)
+
+	_, err := charge.New(params)
+
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	var post models.Post
+	if err := db.First(&post, input.PostID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Post not found"})
+		return
+	}
+
+	post.Paid = true
+	db.Save(&post)
+
+	c.JSON(http.StatusOK, gin.H{"message": "Payment successful and post updated"})
 }
 
 func getPosts(c *gin.Context) {
