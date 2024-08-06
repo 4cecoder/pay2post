@@ -3,6 +3,7 @@
 <head>
     <title>Pay2Post</title>
     <script src="https://unpkg.com/htmx.org@1.3.3"></script>
+    <script src="https://js.stripe.com/v3/"></script>
 </head>
 <body>
     <h1>Pay2Post</h1>
@@ -16,9 +17,49 @@
         <input type="password" name="password" placeholder="Password">
         <button type="submit">Login</button>
     </form>
+    <form id="post-form" hx-post="/posts" hx-trigger="submit" hx-target="#message" onsubmit="handlePayment(event)">
+        <textarea name="content" placeholder="Your post content..."></textarea>
+        <button type="submit">Create Post</button>
+    </form>
     <div id="message"></div>
     <div id="posts">
         <!-- Posts will be dynamically loaded here -->
     </div>
+
+    <script>
+        function handlePayment(event) {
+            event.preventDefault();
+            var stripe = Stripe('pk_test_YOUR_PUBLIC_KEY');
+
+            stripe.createToken('bank_account').then(function(result) {
+                if (result.error) {
+                    // Inform the user if there was an error
+                    var errorElement = document.getElementById('message');
+                    errorElement.textContent = result.error.message;
+                } else {
+                    // Send the token to your server
+                    fetch('/pay', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            token: result.token.id,
+                            post_id: postID // Replace with the actual post ID
+                        })
+                    }).then(function(response) {
+                        return response.json();
+                    }).then(function(data) {
+                        var messageElement = document.getElementById('message');
+                        if (data.error) {
+                            messageElement.textContent = data.error;
+                        } else {
+                            messageElement.textContent = 'Payment successful and post updated';
+                        }
+                    });
+                }
+            });
+        }
+    </script>
 </body>
 </html>
