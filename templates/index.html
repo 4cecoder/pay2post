@@ -1,64 +1,95 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pay2Post</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <script src="https://unpkg.com/htmx.org@1.3.3"></script>
-    <script src="https://js.stripe.com/v3/"></script>
 </head>
-<body>
-    <h1>Pay2Post</h1>
-    <form hx-post="/register" hx-target="#message">
-        <input type="text" name="username" placeholder="Username">
-        <input type="password" name="password" placeholder="Password">
-        <button type="submit">Register</button>
-    </form>
-    <form hx-post="/login" hx-target="#message">
-        <input type="text" name="username" placeholder="Username">
-        <input type="password" name="password" placeholder="Password">
-        <button type="submit">Login</button>
-    </form>
-    <form id="post-form" hx-post="/posts" hx-trigger="submit" hx-target="#message" onsubmit="handlePayment(event)">
-        <textarea name="content" placeholder="Your post content..."></textarea>
-        <button type="submit">Create Post</button>
-    </form>
-    <div id="message"></div>
-    <div id="posts">
+<body class="bg-gray-100 flex flex-col items-center justify-center min-h-screen">
+    <h1 class="text-4xl font-bold mb-8">Pay2Post</h1>
+    
+    <div id="toast" class="fixed top-5 right-5 bg-green-500 text-white p-3 rounded-lg hidden transition-opacity duration-300">
+        <span id="toastMessage"></span>
+    </div>
+
+    <div class="bg-white shadow-md rounded-lg p-6 w-96">
+        <div class="flex justify-between mb-4">
+            <button id="registerTab" class="tab-button text-blue-500 font-semibold">Register</button>
+            <button id="loginTab" class="tab-button text-gray-500">Login</button>
+            <button id="postTab" class="tab-button text-gray-500">Create Post</button>
+        </div>
+
+        <div id="registerForm" class="tab-content">
+            <form hx-post="/register" hx-target="#message" class="mb-4" onsubmit="showToast('Registration successful!')">
+                <h2 class="text-xl font-semibold mb-2">Register</h2>
+                <input type="text" name="username" placeholder="Username" class="border border-gray-300 rounded-md p-2 w-full mb-4" required>
+                <input type="password" name="password" placeholder="Password" class="border border-gray-300 rounded-md p-2 w-full mb-4" required>
+                <button type="submit" class="bg-blue-500 text-white rounded-md p-2 w-full hover:bg-blue-600">Register</button>
+            </form>
+        </div>
+
+        <div id="loginForm" class="tab-content hidden">
+            <form hx-post="/login" hx-target="#message" class="mb-4" onsubmit="showToast('Login successful!')">
+                <h2 class="text-xl font-semibold mb-2">Login</h2>
+                <input type="text" name="username" placeholder="Username" class="border border-gray-300 rounded-md p-2 w-full mb-4" required>
+                <input type="password" name="password" placeholder="Password" class="border border-gray-300 rounded-md p-2 w-full mb-4" required>
+                <button type="submit" class="bg-blue-500 text-white rounded-md p-2 w-full hover:bg-blue-600">Login</button>
+            </form>
+        </div>
+
+        <div id="postForm" class="tab-content hidden">
+            <form id="post-form" hx-post="/posts" hx-target="#message" class="mb-4" onsubmit="showToast('Post created successfully!')">
+                <h2 class="text-xl font-semibold mb-2">Create Post</h2>
+                <textarea name="content" placeholder="Your post content..." class="border border-gray-300 rounded-md p-2 w-full mb-4" required></textarea>
+                <button type="submit" class="bg-green-500 text-white rounded-md p-2 w-full hover:bg-green-600">Create Post</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="message" class="mt-4 text-center text-red-500"></div>
+    <div id="posts" class="mt-4">
         <!-- Posts will be dynamically loaded here -->
     </div>
 
     <script>
-        function handlePayment(event) {
-            event.preventDefault();
-            var stripe = Stripe('pk_test_YOUR_PUBLIC_KEY');
+        document.getElementById('registerTab').onclick = function() {
+            showTab('registerForm');
+        };
+        document.getElementById('loginTab').onclick = function() {
+            showTab('loginForm');
+        };
+        document.getElementById('postTab').onclick = function() {
+            showTab('postForm');
+        };
 
-            stripe.createToken('bank_account').then(function(result) {
-                if (result.error) {
-                    // Inform the user if there was an error
-                    var errorElement = document.getElementById('message');
-                    errorElement.textContent = result.error.message;
-                } else {
-                    // Send the token to your server
-                    fetch('/pay', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({
-                            token: result.token.id,
-                            post_id: postID // Replace with the actual post ID
-                        })
-                    }).then(function(response) {
-                        return response.json();
-                    }).then(function(data) {
-                        var messageElement = document.getElementById('message');
-                        if (data.error) {
-                            messageElement.textContent = data.error;
-                        } else {
-                            messageElement.textContent = 'Payment successful and post updated';
-                        }
-                    });
-                }
+        function showTab(tabId) {
+            const tabs = document.querySelectorAll('.tab-content');
+            tabs.forEach(tab => {
+                tab.classList.add('hidden');
             });
+            document.getElementById(tabId).classList.remove('hidden');
+
+            const buttons = document.querySelectorAll('.tab-button');
+            buttons.forEach(button => {
+                button.classList.remove('text-blue-500');
+                button.classList.add('text-gray-500');
+            });
+            document.querySelector(`button[id="${tabId.replace('Form', 'Tab')}"]`).classList.add('text-blue-500');
+        }
+
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            const toastMessage = document.getElementById('toastMessage');
+            toastMessage.textContent = message;
+            toast.classList.remove('hidden');
+            toast.classList.add('opacity-100');
+
+            setTimeout(() => {
+                toast.classList.remove('opacity-100');
+                toast.classList.add('hidden');
+            }, 3000); // Toast will disappear after 3 seconds
         }
     </script>
 </body>
