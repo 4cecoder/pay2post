@@ -8,7 +8,7 @@ import (
     "gorm.io/gorm"
     "log"
     "github.com/stripe/stripe-go/v72"
-    "github.com/stripe/stripe-go/v72/paymentintent"
+    "github.com/stripe/stripe-go/v72/charge"
     "golang.org/x/crypto/bcrypt"
 )
 
@@ -32,6 +32,7 @@ func main() {
     r.POST("/register", register)
     r.POST("/login", login)
     r.POST("/posts", createPost)
+    r.POST("/pay", paymentHandler)
     r.GET("/posts", getPosts)
     r.PUT("/posts/:id", updatePost)
     r.DELETE("/posts/:id", deletePost)
@@ -89,25 +90,56 @@ func createPost(c *gin.Context) {
         return
     }
 
-    // Handle payment
-    params := &stripe.PaymentIntentParams{
-        Amount:   stripe.Int64(1000), // Amount in cents
-        Currency: stripe.String(string(stripe.CurrencyUSD)),
-    }
-    pi, err := paymentintent.New(params)
-    if err != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create payment intent"})
-        return
-    }
-
-    post.Paid = true
+    post.Paid = false // Initially set as unpaid
 
     if err := db.Create(&post).Error; err != nil {
         c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create post"})
         return
     }
 
-    c.JSON(http.StatusOK, gin.H{"message": "Post created successfully", "payment_intent": pi.ClientSecret})
+    c.JSON(http.StatusOK, post)
+}
+
+func paymentHandler(c *gin.Context) {
+    var input struct {
+        Token  string `json:"token"`
+        PostID uint   `json:"post_id"`
+    }
+
+    if err := c.ShouldBindJSON(&input); err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+        return
+    }
+
+    // Set your secret key. Remember to switch to your live secret key in production!
+    // See your keys here: https://dashboard.stripe.com/apikeys
+    stripe.Key = "sk_test_YOUR_SECRET_KEY"
+
+    params := &stripe.ChargeParams{
+        Amount:      stripe.Int64(500), // Amount in cents
+        Currency:    stripe.String(string(stripe.CurrencyUSD)),
+        Description: stripe.String("Pay2Post charge"),
+    }
+    params.SetSource(input.Token)
+
+    _, err := charge.New(params)
+
+    if err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+        return
+    }
+
+    // Mark the post as paid
+    var post models.Post
+    if err := db.First(&post, input.PostID).Error; err != nil {
+        c.JSON(http.StatusNotFound, gin.H{"error": "Post not found"})
+        return
+    }
+
+    post.Paid = true
+    db.Save(&post)
+
+    c.JSON(http.StatusOK, gin.H{"message": "Payment successful and post updated"})
 }
 
 func getPosts(c *gin.Context) {
